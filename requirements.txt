@@ -1,0 +1,56 @@
+# Flask 核心框架
+Flask==2.3.3
+
+# Flask 扩展
+Flask-SQLAlchemy==3.0.5    # 数据库ORM
+Flask-CORS==4.0.0          # 跨域支持
+Flask-Login==0.6.3         # 用户会话管理
+
+# 数据库
+SQLAlchemy==2.0.21         # ORM核心
+
+# 认证和安全
+PyJWT==2.8.0               # JWT令牌处理
+Werkzeug==2.3.7            # 密码哈希等安全工具
+
+# 数据验证
+marshmallow==3.20.1        # 数据序列化和验证
+
+# 系统监控（可选）
+psutil==5.9.5              # 系统信息获取
+
+# 开发工具
+python-dotenv==1.0.0       # 环境变量管理
+
+# 数据库驱动（根据需要选择）
+# SQLite（Python内置，无需安装）
+# PostgreSQL
+# psycopg2-binary==2.9.7
+
+# MySQL
+# PyMySQL==1.1.0
+
+# 日志处理
+# loguru==0.7.2
+
+# 文件上传处理
+# Pillow==10.0.0
+
+# 邮件发送（如果需要）
+# Flask-Mail==0.9.1
+
+# 缓存（如果需要）
+# Flask-Caching==2.1.0
+# redis==4.6.0
+
+# API文档生成（如果需要）
+# flask-restx==1.2.0
+# flasgger==0.9.7.1
+
+# 测试工具
+# pytest==7.4.2
+# pytest-flask==1.2.0
+
+# 代码质量工具
+# flake8==6.1.0
+# black==23.9.1
