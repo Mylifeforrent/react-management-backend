@@ -30,10 +30,14 @@ def create_app():
     
     # 启用 CORS（跨域资源共享），允许前端访问后端 API
     # 配置支持凭证传递和预检请求
+    # 添加5174端口支持（Vite开发服务器可能使用不同端口）
     CORS(app, 
-         origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
+         origins=[
+             'http://localhost:5173', 'http://127.0.0.1:5173',
+             'http://localhost:5174', 'http://127.0.0.1:5174'
+         ],
          supports_credentials=True,
-         allow_headers=['Content-Type', 'Authorization', 'icode'],
+         allow_headers=['Content-Type', 'Authorization', 'icode', 'X-Requested-With'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 
     # 注册蓝图（Blueprint）- 用于组织路由

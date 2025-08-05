@@ -1,6 +1,7 @@
 """
 认证相关路由
 处理用户登录、注册、登出等认证功能
+支持前端加密密码和防重放攻击验证
 """
 
 from flask import Blueprint, request, jsonify, current_app
@@ -11,6 +12,7 @@ from models.user import User
 from models.base import db
 from utils.decorators import validate_json
 from utils.response import success_response, error_response
+from utils.security import verify_encrypted_password, verify_anti_replay, log_security_event
 
 # 创建认证蓝图
 # Blueprint 是 Flask 中用于组织路由的机制
@@ -20,12 +22,15 @@ auth_bp = Blueprint('auth', __name__)
 @validate_json(['username', 'password'])
 def login():
     """
-    用户登录接口
+    安全用户登录接口
+    支持前端加密密码和防重放攻击验证
     
     请求体格式:
     {
         "username": "用户名或邮箱",
-        "password": "密码"
+        "password": "SHA256加密后的密码",
+        "nonce": "随机数字符串",
+        "timestamp": 时间戳
     }
     
     返回格式:
@@ -42,21 +47,38 @@ def login():
         # 获取请求数据
         data = request.get_json()
         username = data.get('username')
-        password = data.get('password')
+        encrypted_password = data.get('password')  # 前端加密后的密码
+        nonce = data.get('nonce')
+        timestamp = data.get('timestamp')
+        
+        # 记录登录尝试（不记录密码）
+        current_app.logger.info(f'登录尝试: 用户名={username}, IP={request.remote_addr}')
+        
+        # 验证必要参数
+        if not all([username, encrypted_password]):
+            return error_response('用户名和密码不能为空', code=400)
+        
+        # 如果提供了防重放参数，进行验证
+        if nonce and timestamp:
+            if not verify_anti_replay(nonce, timestamp):
+                return error_response('请求验证失败，请重新登录', code=400)
         
         # 查找用户（支持用户名或邮箱登录）
         user = User.find_by_username(username) or User.find_by_email(username)
         
         # 验证用户是否存在
         if not user:
-            return error_response('用户不存在', code=401)
+            current_app.logger.warning(f'登录失败: 用户不存在 - {username}')
+            return error_response('用户名或密码错误', code=401)  # 不透露具体错误信息
         
-        # 验证密码
-        if not user.check_password(password):
-            return error_response('密码错误', code=401)
+        # 验证加密密码
+        if not verify_encrypted_password(user, encrypted_password, username):
+            log_security_event('login_failed', username, request.remote_addr, '密码错误')
+            return error_response('用户名或密码错误', code=401)
         
         # 检查用户状态
         if not user.is_active_user():
+            current_app.logger.warning(f'登录失败: 账户被禁用 - {username}')
             return error_response('账户已被禁用，请联系管理员', code=403)
         
         # 生成 JWT 令牌
@@ -79,6 +101,9 @@ def login():
         # 更新用户最后登录时间
         user.last_login = datetime.utcnow()
         user.save()
+        
+        # 记录成功登录
+        log_security_event('login_success', username, request.remote_addr)
         
         # 返回成功响应
         return success_response(

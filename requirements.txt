@@ -22,6 +22,9 @@ psutil==5.9.5              # 系统信息获取
 # 开发工具
 python-dotenv==1.0.0       # 环境变量管理
 
+# HTTP请求库（用于测试）
+requests==2.31.0           # HTTP客户端库
+
 # 数据库驱动（根据需要选择）
 # SQLite（Python内置，无需安装）
 # PostgreSQL
