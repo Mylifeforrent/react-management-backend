@@ -87,6 +87,36 @@ def get_users():
         current_app.logger.error(f'获取用户列表失败: {str(e)}')
         return error_response('获取用户列表失败', code=500)
 
+@users_bp.route('/getUserInfo', methods=['GET'])
+@require_auth
+def get_user_info():
+    """
+    获取当前登录用户信息接口
+    
+    用于前端获取当前登录用户的详细信息
+    通过token解析出用户ID，然后返回用户信息
+    """
+    try:
+        # 从请求上下文中获取当前用户信息（由require_auth装饰器设置）
+        # 根据decorators.py中的实现，用户信息被设置到request.current_user
+        current_user = getattr(request, 'current_user', None)
+        
+        if not current_user:
+            return error_response('用户未登录', code=401)
+        
+        # 检查用户状态（装饰器已经检查过，但这里再次确认）
+        if not current_user.is_active_user():
+            return error_response('用户账户已被禁用', code=403)
+        
+        return success_response(
+            message='获取用户信息成功',
+            data=current_user.to_dict()
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f'获取当前用户信息失败: {str(e)}')
+        return error_response('获取用户信息失败', code=500)
+
 @users_bp.route('/<int:user_id>', methods=['GET'])
 @require_auth
 def get_user(user_id):
@@ -295,6 +325,123 @@ def update_user_status(user_id):
     except Exception as e:
         current_app.logger.error(f'更新用户状态失败: {str(e)}')
         return error_response('更新用户状态失败', code=500)
+
+@users_bp.route('/batch', methods=['POST'])
+@require_admin  # 只有管理员可以批量操作用户
+@validate_json(['action', 'user_ids'])
+def batch_operation():
+    """
+    批量操作用户接口（管理员功能）
+    
+    支持批量删除、批量修改状态、批量修改角色等操作
+    
+    请求体格式:
+    {
+        "action": "delete|update_status|update_role",
+        "user_ids": [1, 2, 3],
+        "data": {
+            "status": "active|inactive|banned",  // 当action为update_status时需要
+            "role": "admin|user|editor"          // 当action为update_role时需要
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        user_ids = data.get('user_ids', [])
+        operation_data = data.get('data', {})
+        
+        # 验证参数
+        if not user_ids or not isinstance(user_ids, list):
+            return error_response('用户ID列表不能为空', code=400)
+        
+        valid_actions = ['delete', 'update_status', 'update_role']
+        if action not in valid_actions:
+            return error_response(f'无效的操作类型，必须是: {", ".join(valid_actions)}', code=400)
+        
+        # 查询要操作的用户
+        users = User.query.filter(User.id.in_(user_ids)).all()
+        if not users:
+            return error_response('未找到指定的用户', code=404)
+        
+        # 防止操作管理员账户的安全检查
+        admin_users = [user for user in users if user.is_admin()]
+        if admin_users and action == 'delete':
+            return error_response('不能删除管理员账户', code=403)
+        
+        success_count = 0
+        failed_users = []
+        
+        # 执行批量操作
+        if action == 'delete':
+            # 批量删除用户
+            for user in users:
+                if not user.is_admin():  # 再次确认不删除管理员
+                    try:
+                        if user.delete():
+                            success_count += 1
+                        else:
+                            failed_users.append({'id': user.id, 'username': user.username})
+                    except Exception as e:
+                        current_app.logger.error(f'删除用户 {user.id} 失败: {str(e)}')
+                        failed_users.append({'id': user.id, 'username': user.username})
+        
+        elif action == 'update_status':
+            # 批量更新用户状态
+            new_status = operation_data.get('status')
+            valid_statuses = ['active', 'inactive', 'banned']
+            
+            if new_status not in valid_statuses:
+                return error_response(f'无效的状态值，必须是: {", ".join(valid_statuses)}', code=400)
+            
+            for user in users:
+                try:
+                    user.status = new_status
+                    if user.save():
+                        success_count += 1
+                    else:
+                        failed_users.append({'id': user.id, 'username': user.username})
+                except Exception as e:
+                    current_app.logger.error(f'更新用户 {user.id} 状态失败: {str(e)}')
+                    failed_users.append({'id': user.id, 'username': user.username})
+        
+        elif action == 'update_role':
+            # 批量更新用户角色
+            new_role = operation_data.get('role')
+            valid_roles = ['admin', 'user', 'editor']
+            
+            if new_role not in valid_roles:
+                return error_response(f'无效的角色值，必须是: {", ".join(valid_roles)}', code=400)
+            
+            for user in users:
+                try:
+                    user.role = new_role
+                    if user.save():
+                        success_count += 1
+                    else:
+                        failed_users.append({'id': user.id, 'username': user.username})
+                except Exception as e:
+                    current_app.logger.error(f'更新用户 {user.id} 角色失败: {str(e)}')
+                    failed_users.append({'id': user.id, 'username': user.username})
+        
+        # 构建返回结果
+        result_message = f'批量操作完成，成功处理 {success_count} 个用户'
+        if failed_users:
+            result_message += f'，失败 {len(failed_users)} 个用户'
+        
+        return success_response(
+            message=result_message,
+            data={
+                'success_count': success_count,
+                'failed_count': len(failed_users),
+                'failed_users': failed_users,
+                'total_count': len(users)
+            }
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f'批量操作用户失败: {str(e)}')
+        return error_response('批量操作用户失败', code=500)
 
 @users_bp.route('/stats', methods=['GET'])
 @require_admin  # 只有管理员可以查看统计信息
