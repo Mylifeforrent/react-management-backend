@@ -165,13 +165,13 @@ class User(BaseModel, UserMixin):
     def to_dict(self, include_sensitive=False):
         """
         将用户对象转换为字典
-        重写父类方法，可以选择是否包含敏感信息
+        重写父类方法，可以选择是否包含敏感信息，并将字段名转换为驼峰命名
         
         Args:
             include_sensitive (bool): 是否包含敏感信息（如密码哈希）
             
         Returns:
-            dict: 用户信息字典
+            dict: 用户信息字典（驼峰命名）
         """
         # 调用父类的 to_dict 方法
         result = super().to_dict()
@@ -180,7 +180,31 @@ class User(BaseModel, UserMixin):
         if not include_sensitive:
             result.pop('password_hash', None)
         
-        return result
+        # 将下划线命名转换为驼峰命名
+        camel_case_result = {}
+        field_mapping = {
+            'id': 'id',
+            'username': 'userName',
+            'email': 'email',
+            'real_name': 'realName',
+            'phone': 'phone',
+            'role': 'role',
+            'status': 'status',
+            'avatar': 'avatar',
+            'last_login': 'lastLogin',
+            'created_at': 'createTime',
+            'updated_at': 'updateTime'
+        }
+        
+        for snake_key, camel_key in field_mapping.items():
+            if snake_key in result:
+                camel_case_result[camel_key] = result[snake_key]
+        
+        # 为了兼容前端现有的字段名，添加 userId 字段
+        if 'id' in camel_case_result:
+            camel_case_result['userId'] = camel_case_result['id']
+        
+        return camel_case_result
     
     @classmethod
     def find_by_username(cls, username):
